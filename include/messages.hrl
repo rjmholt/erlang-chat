@@ -8,6 +8,7 @@
 -record(identitychange, {identity}).
 -record(newidentity, {identity, former}).
 -record(roomchange, {identity, roomid, former}).
+-record(createroom, {identity, roomid}).
 -record(roomcontents, {roomid, owner, identities}).
 -record(roomlist, {rooms}).
 -record(who, {roomid}).

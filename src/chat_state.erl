@@ -14,7 +14,14 @@
          change_id/3,
          reject_idchange/2,
          client_not_new/2,
-         name_in_use/2]).
+         name_in_use/2,
+         reject_createroom/2,
+         make_room/4,
+         send_roomlist/2,
+         send_roomcontents/3,
+         is_owner/3,
+         delete_room/2,
+         kick_client/5]).
 
 % =========== EXPORTED FUNCTIONS ==============
 
@@ -42,21 +49,8 @@ add_client(State, RoomID, CPid) ->
     ets:insert(State#state.clients, Client),
     [Room] = ets:lookup(State#state.rooms, RoomID),
     ets:insert(Room#room.occupants, Client),
-    ets:insert(State#state.names, {Name}),
+    ets:insert(State#state.names, #name_cpid{name=Name,cpid=CPid}),
     Msg = #roomchange{identity=Name,roomid=RoomID,former=''},
-    send(Room#room.occupants, Msg).
-
-quit_client(State, CPid) ->
-    [Client] = ets:lookup(State#state.clients, CPid),
-    [Room] = ets:lookup(State#state.rooms, Client#client.room),
-    ets:delete(State#state.clients, CPid),
-    ets:delete(Room#room.occupants, CPid),
-    ets:delete(State#state.names, Client#client.name),
-    change_owner(Client#client.owns, State#state.rooms, ''),
-    Name = Client#client.name,
-    PrevRoomID = Client#client.room,
-    Msg = #roomchange{identity=Name,roomid='',former=PrevRoomID},
-    CPid ! Msg,
     send(Room#room.occupants, Msg).
 
 change_client_room(State, RoomID, CPid) ->
@@ -82,6 +76,22 @@ reject_roomchange(State, CPid) ->
 client_not_new(State, CPid) ->
     ets:member(State#state.clients, CPid).
 
+% ----- Message Type: quit -----
+%
+
+quit_client(State, CPid) ->
+    [Client] = ets:lookup(State#state.clients, CPid),
+    [Room] = ets:lookup(State#state.rooms, Client#client.room),
+    ets:delete(State#state.clients, CPid),
+    ets:delete(Room#room.occupants, CPid),
+    ets:delete(State#state.names, Client#client.name),
+    change_owner(Client#client.owns, State#state.rooms, ''),
+    Name = Client#client.name,
+    PrevRoomID = Client#client.room,
+    Msg = #roomchange{identity=Name,roomid='',former=PrevRoomID},
+    CPid ! Msg,
+    send(Room#room.occupants, Msg).
+
 % ----- Message Type: identitychange -----
 %
 change_id(State, Ident, CPid) ->
@@ -90,7 +100,7 @@ change_id(State, Ident, CPid) ->
     PrevName = Client#client.name,
     ets:update_element(State#state.clients, CPid, {#client.name, Ident}),
     ets:delete(State#state.names, PrevName),
-    ets:insert(State#state.names, {Ident}),
+    ets:insert(State#state.names, #name_cpid{name=Name,cpid=CPid}),
     Msg = #newidentity{identity=Ident,former=PrevName},
     send(Room#room.occupants, Msg).
 
@@ -100,6 +110,69 @@ reject_idchange(State, CPid) ->
     Name = Client#client.name,
     Msg = #newidentity{identity=Name,former=Name},
     send(Room#room.occupants, Msg).
+
+% ----- Message Type: createroom -----
+%
+reject_createroom(State, CPid) ->
+    RoomList = get_roomlist(State),
+    Msg = #roomlist{rooms=RoomList},
+    CPid ! Msg.
+
+make_room(State, RoomID, Owner, CPid) ->
+    Room = #room{name=RoomID,owner=Owner},
+    ets:insert(State#state.rooms, Room),
+    Msg = #roomlist{rooms=get_roomlist(State)},
+    CPid ! Msg.
+
+% ----- Message Type: delete -----
+%
+is_owner(State, RoomID, CPid) ->
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    [Client] = ets:lookup(State#state.clients, CPid),
+    Room#room.owner == Client#client.name.
+
+delete_room(State, RoomID) ->
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    MoveMainHall = fun (Client, _) ->
+                    CPid = Client#client.pid,
+                    change_client_room(State, ?MAINHALL, CPid)
+                   end,
+    ets:foldl(Room#room.occupants, MoveMainHall, not_used),
+    ets:delete(State#state.rooms, RoomID).
+
+% ----- Message Type: list -----
+%
+send_roomlist(State, CPid) ->
+    Msg = #roomlist{rooms=get_roomlist(State)},
+    CPid ! Msg.
+
+% ----- Message Type: who -----
+%
+send_roomcontents(State, RoomID, CPid) ->
+    Msg = case ets:lookup(State#state.rooms, RoomID) of
+        [] ->
+            #roomcontents{roomid='',owner='',identities=[]};
+        [Room] ->
+            Owner = Room#room.owner,
+            OccFolder = fun (Occ, Acc) ->
+                            OccID = Occ#client.name,
+                            [OccID|Acc]
+                        end,
+            Ids = ets:foldl(Room#room.occupants, OccFolder, []),
+            #roomcontents{roomid=RoomID,owner=Owner,identities=Ids}
+    end,
+    CPid ! Msg.
+
+% ----- Message Type: kick -----
+%
+kick_client(State, Identity, RoomID, Time, CPid) ->
+    [BanNameCPid] = ets:lookup(State#state.names, Identity),
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    add_ban(State, RoomID, Time, CPid),
+    case ets:member(Room#room.occupants, BanNameCPid#name_cpid.cpid) of
+        true ->
+            change_client_room(State, RoomID, BanNameCPid#name_cpid.cpid)
+    end.
 
 % ----- General Functions -----
 %
@@ -140,7 +213,7 @@ lowest_acc([N|Ns], Acc) ->
     end;
 lowest_acc([], Acc) -> Acc.
 
-get_guest_num_list({_From, Client}, NumList) ->
+get_guest_num_list({_CPid, Client}, NumList) ->
     Name = Client#client.name,
     RE = "guest\\d+",
     case re:run(Name, RE, [{capture, none}]) of
@@ -151,3 +224,21 @@ get_guest_num_list({_From, Client}, NumList) ->
             Num = list_to_integer(string:substr(Name,6)),
             [Num|NumList]
     end.
+
+get_roomlist(State) ->
+    ListFolder = fun (Room, Acc) ->
+                    RoomID = Room#room.name,
+                    [RoomID|Acc]
+                 end,
+    ets:foldr(ListFolder, State#state.rooms, []).
+
+add_ban(State, RoomID, Time, CPid) ->
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    Bans = [CPid|Room#room.bans],
+    ets:update_element(State#state.rooms, RoomID, {#room.bans, Bans}),
+    timer:apply_after(Time, ?MODULE, remove_ban, [State,RoomID,CPid]).
+
+remove_ban(State, RoomID, CPid) ->
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    Bans = lists:delete(CPid, Room#room.bans),
+    ets:update_element(State#state.rooms, RoomID, {#room.bans, Bans}).

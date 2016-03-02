@@ -70,6 +70,45 @@ handle_cast({#identitychange{identity=Name}, From}, State) ->
     end,
     {noreply, State};
 
+handle_cast({#createroom{identity=Name,roomid=RoomID}, From}, State) ->
+    case chat_state:room_exists(RoomID) of
+        true ->
+            chat_state:reject_createroom(State, From);
+        false ->
+            chat_state:make_room(State, RoomID, Name, From)
+    end,
+    {noreply, State};
+
+handle_cast({#delete{roomid=RoomID}, From}, State) ->
+    case chat_state:room_exists(State, RoomID) of
+        true ->
+            case chat_state:is_owner(State, RoomID, From) of
+                true ->
+                    chat_state:delete_room(State, RoomID);
+                false ->
+                    chat_state:send_roomlist(State, From)
+            end;
+        false ->
+            chat_state:send_roomlist(State, From)
+    end,
+    {noreply, State};
+
+handle_cast({list, From}, State) ->
+    chat_state:send_roomlist(State, From),
+    {noreply, State};
+
+handle_cast({#who{roomid=RoomID}, From}, State) ->
+    chat_state:send_roomcontents(State, RoomID, From),
+    {noreply, State};
+
+handle_cast({#kick{roomid=RoomID,time=Time,identity=Identity},From},State) ->
+    case chat_state:is_owner(State, RoomID, From) of
+        true ->
+            chat_state:kick_client(State, Identity, RoomID, Time, From)
+    end,
+    chat_state:send_roomcontents(State, RoomID, From),
+    {noreply, State};
+
 handle_cast({Msg, Pid}, State) ->
     MsgStr = io_lib:format("~p", Msg),
     Pid ! #error{content="Unsupported message" ++ MsgStr},
