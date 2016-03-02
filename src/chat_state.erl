@@ -182,6 +182,10 @@ room_exists(State, RoomID) ->
 name_in_use(State, Name) ->
     ets:member(State#state.names, Name).
 
+is_banned(State, RoomID, CPid) ->
+    [Room] = ets:lookup(State#state.rooms, RoomID),
+    lists:member(CPid, Room#room.bans).
+
 % ----------- INTERNAL FUNCTIONS -----------------
 
 % Sends Msg to all clients in the ets table Clients

@@ -37,10 +37,15 @@ handle_cast({#join{roomid=RoomID}, From}, State) ->
     case chat_state:room_exists(State, RoomID) of
         true ->
             case chat_state:client_not_new(State, From) of
+                % If the client isn't connecting for the first
+                % time, move them out of the old room and
+                % notify its occupants
                 true ->
-                    % If the client isn't connecting for the first time,
-                    % move them out of the old room and notify its occupants
-                    chat_state:change_client_room(State, RoomID, From);
+                    case chat_state:is_banned(State, RoomID, From) of
+                        true ->
+                            chat_state:reject_roomchange(State, From);
+                        false ->
+                            chat_state:change_client_room(State, RoomID, From);
                 false ->
                     % Otherwise they are connecting for the first time
                     % and have to be added to the state
