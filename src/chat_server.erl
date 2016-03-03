@@ -3,8 +3,6 @@
 
 -behaviour(gen_server).
 
--define(SERVER, ?MODULE).
-
 -include("server_structure.hrl").
 -include("messages.hrl").
 
@@ -18,7 +16,8 @@
 % Server API definitions
 start() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 stop() -> gen_server:call(?MODULE, stop).
-handle_msg(Msg, Pid) -> gen_server:cast(?MODULE, {Msg, Pid}).
+handle_msg(Pid, Msg) -> gen_server:cast(?MODULE, {Pid, Msg}).
+join(Pid, RoomID) -> gen_server:call(?MODULE, {Pid, #join{roomid=RoomID}}).
 
 % gen_server implementations
 
@@ -31,7 +30,7 @@ init([]) ->
 %   were previously in, if any. If the room is invalid,
 %   Client is sent a roomchange to the room they are
 %   currently in.
-handle_cast({#join{roomid=RoomID}, From}, State) ->
+handle_cast({From, #join{roomid=RoomID}}, State) ->
     % Make sure the room exists
     % If it does, see if the client already exists
     case chat_state:room_exists(State, RoomID) of
@@ -45,7 +44,8 @@ handle_cast({#join{roomid=RoomID}, From}, State) ->
                         true ->
                             chat_state:reject_roomchange(State, From);
                         false ->
-                            chat_state:change_client_room(State, RoomID, From);
+                            chat_state:change_client_room(State, RoomID, From)
+                    end;
                 false ->
                     % Otherwise they are connecting for the first time
                     % and have to be added to the state
@@ -58,15 +58,15 @@ handle_cast({#join{roomid=RoomID}, From}, State) ->
     end,
     {noreply, State};
 
-handle_cast({quit, From},  State) ->
+handle_cast({From, quit},  State) ->
     chat_state:quit_client(State, From),
     {noreply, State};
 
-handle_cast({#message{content=Content}, From}, State) ->
+handle_cast({From, #message{content=Content}}, State) ->
     chat_state:message(State, Content, From),
     {noreply, State};
 
-handle_cast({#identitychange{identity=Name}, From}, State) ->
+handle_cast({From, #identitychange{identity=Name}}, State) ->
     case chat_state:name_in_use(State, Name) of
         true ->
             chat_state:reject_idchange(State, From);
@@ -75,7 +75,7 @@ handle_cast({#identitychange{identity=Name}, From}, State) ->
     end,
     {noreply, State};
 
-handle_cast({#createroom{identity=Name,roomid=RoomID}, From}, State) ->
+handle_cast({From, #createroom{identity=Name,roomid=RoomID}}, State) ->
     case chat_state:room_exists(RoomID) of
         true ->
             chat_state:reject_createroom(State, From);
@@ -84,7 +84,7 @@ handle_cast({#createroom{identity=Name,roomid=RoomID}, From}, State) ->
     end,
     {noreply, State};
 
-handle_cast({#delete{roomid=RoomID}, From}, State) ->
+handle_cast({From, #delete{roomid=RoomID}}, State) ->
     case chat_state:room_exists(State, RoomID) of
         true ->
             case chat_state:is_owner(State, RoomID, From) of
@@ -98,15 +98,15 @@ handle_cast({#delete{roomid=RoomID}, From}, State) ->
     end,
     {noreply, State};
 
-handle_cast({list, From}, State) ->
+handle_cast({From, list}, State) ->
     chat_state:send_roomlist(State, From),
     {noreply, State};
 
-handle_cast({#who{roomid=RoomID}, From}, State) ->
+handle_cast({From, #who{roomid=RoomID}}, State) ->
     chat_state:send_roomcontents(State, RoomID, From),
     {noreply, State};
 
-handle_cast({#kick{roomid=RoomID,time=Time,identity=Identity},From},State) ->
+handle_cast({From, #kick{roomid=RoomID,time=Time,identity=Identity}},State) ->
     case chat_state:is_owner(State, RoomID, From) of
         true ->
             chat_state:kick_client(State, Identity, RoomID, Time, From)
@@ -114,14 +114,14 @@ handle_cast({#kick{roomid=RoomID,time=Time,identity=Identity},From},State) ->
     chat_state:send_roomcontents(State, RoomID, From),
     {noreply, State};
 
-handle_cast({Msg, Pid}, State) ->
-    MsgStr = io_lib:format("~p", Msg),
-    Pid ! #error{content="Unsupported message" ++ MsgStr},
+handle_cast({From, Msg}, State) ->
+    Reply = io_lib:format("~s: ~p~n", ["Unsupported message", Msg]),
+    From ! #error{content=Reply},
     {noreply, State}.
 
 handle_call(stop, _From, State) -> {stop, normal, stopped, State};
 handle_call(_Msg, _From, State) -> {noreply, State}.
 
 handle_info(_Info, State) -> {noreply, State}.
-terminate(_Reason, _State) -> ok.
+terminate(_Reason, _State) -> init:stop().
 code_change(_OldVsn, State, _Extra) -> {ok, State}.

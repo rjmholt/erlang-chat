@@ -21,7 +21,8 @@
          send_roomcontents/3,
          is_owner/3,
          delete_room/2,
-         kick_client/5]).
+         kick_client/5,
+         is_banned/3]).
 
 % =========== EXPORTED FUNCTIONS ==============
 
@@ -50,8 +51,10 @@ add_client(State, RoomID, CPid) ->
     [Room] = ets:lookup(State#state.rooms, RoomID),
     ets:insert(Room#room.occupants, Client),
     ets:insert(State#state.names, #name_cpid{name=Name,cpid=CPid}),
-    Msg = #roomchange{identity=Name,roomid=RoomID,former=''},
-    send(Room#room.occupants, Msg).
+    IDMsg = #newidentity{identity=Name,former=''},
+    JoinMsg = #roomchange{identity=Name,roomid=RoomID,former=''},
+    send(Room#room.occupants, IDMsg),
+    send(Room#room.occupants, JoinMsg).
 
 change_client_room(State, RoomID, CPid) ->
     [Client] = ets:lookup(State#state.clients, CPid),
@@ -100,7 +103,7 @@ change_id(State, Ident, CPid) ->
     PrevName = Client#client.name,
     ets:update_element(State#state.clients, CPid, {#client.name, Ident}),
     ets:delete(State#state.names, PrevName),
-    ets:insert(State#state.names, #name_cpid{name=Name,cpid=CPid}),
+    ets:insert(State#state.names, #name_cpid{name=Ident,cpid=CPid}),
     Msg = #newidentity{identity=Ident,former=PrevName},
     send(Room#room.occupants, Msg).
 

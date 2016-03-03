@@ -8,5 +8,8 @@
                 clients=ets:new(clients, [{keypos, #client.pid}]),
                 names=ets:new(names, [])}).
 
+-define(NODE, here).
+% Central server name
+-define(SERVER, chat_server).
 % Server entry room/base room
 -define(MAINHALL, 'MainHall').
