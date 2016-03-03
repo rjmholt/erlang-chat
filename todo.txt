@@ -1,0 +1,33 @@
+Module descriptions:
+* chat
+    Master module, starts the server and the listener. Root executable.
+* chat_listener
+    Listens for incoming TCP connections. Spins them off into connection
+    processes
+* chat_connection
+    Receives and sends TCP concurrently. Sends initial join to the server to
+    initialise the user when they connect
+* chat_server
+    Deals with business logic of server without knowing details of
+    implementation. This includes rooms, messages, owners, bans
+* chat_state
+    Deals with changes to the state of the server to comply with the server's
+    semantics
+* chat_user
+    Provides an interface both to individual user information and how users are
+    stored collectively
+* chat_room
+    Provides an interface for individual room information and how rooms are
+    stored collectively
+
+Refactor:
+    - Decouple chat_state from ets
+    - Create chat_users, chat_rooms to deal with specific
+      storage implementations
+    - Bring message handling back into the server
+    - Make connections agnostic of server structure/rooms/etc
+
+Place JSON parsing into connections.
+
+Link/monitor threads so shutdown is smooth. Add shutdown hooks to each
+connection.
