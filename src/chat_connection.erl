@@ -1,8 +1,8 @@
 -module(chat_connection).
 -export([start/2]).
 
--include("messages.hrl").
--include("server_structure.hrl").
+-include("include/messages.hrl").
+-include("include/server_structure.hrl").
 
 start(Listen, ServerPid) ->
     {ok, Socket} = gen_tcp:accept(Listen),
