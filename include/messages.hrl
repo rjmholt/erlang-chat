@@ -22,5 +22,7 @@
 -record(roomcontents, {roomid, owner, identities}).
 
 % Extra message, largely for debug
--record(error, {content}).
+-record(error, {message}).
 
+% Internal server message for new connection setup
+%  - new_connection

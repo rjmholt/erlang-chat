@@ -59,7 +59,8 @@ create(State, UPid) ->
     User = #user{pid=UPid, name=Name},
     user_insert(UserTab, User),
     NameTab = state_get_names(State),
-    name_insert(NameTab, #name_upid{name=Name,pid=UPid}).
+    name_insert(NameTab, #name_upid{name=Name,pid=UPid}),
+    Name.
 
 delete(State, UPid) when is_pid(UPid) ->
     UserTab = state_get_users(State),
@@ -165,7 +166,8 @@ new_guest_name(NameTab) ->
     Nums = name_fold(fun get_guest_num_list/2, [], NameTab),
     SortedNums = lists:sort(Nums),
     NewGuestNum = lowest_not_in_list(SortedNums),
-    "guest" ++ integer_to_list(NewGuestNum).
+    NumBin = list_to_binary(integer_to_list(NewGuestNum)),
+    <<?GUESTNAME/utf8, NumBin/binary>>.
 
 lowest_not_in_list(Nums) -> lowest_acc(Nums, 1).
 lowest_acc([N|Ns], Acc) ->
@@ -176,7 +178,7 @@ lowest_acc([N|Ns], Acc) ->
 lowest_acc([], Acc) -> Acc.
 
 get_guest_num_list({Name, _UPid}, NumList) ->
-    RE = ?GUESTNAME ++ "\\d+",
+    RE = <<?GUESTNAME/utf8,"\\d+"/utf8>>,
     NumIdx = string:len(?GUESTNAME)+1,
     case re:run(Name, RE, [{capture, none}]) of
         nomatch ->

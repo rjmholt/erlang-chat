@@ -12,4 +12,4 @@
 % Central server name
 -define(SERVER, chat_server).
 % Server entry room/base room
--define(MAINHALL, 'MainHall').
+-define(MAINHALL, <<"MainHall"/utf8>>).

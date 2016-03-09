@@ -10,6 +10,10 @@
          send/3,
          create/3,
          delete/2,
+         add_user/4,
+         delete_user/3,
+         move_user/4,
+         move_all/3,
          already_exists/2,
          is_owned_by/3,
          ban/4,
@@ -35,6 +39,34 @@ create(State, RoomID, Owner) ->
 delete(State, RoomID) ->
     RoomTab = state_get_rooms(State),
     rooms_delete(RoomTab, RoomID).
+
+add_user(State, RoomID, UPid, UserName) ->
+    RoomTab = state_get_rooms(State),
+    Room = rooms_lookup(RoomTab, RoomID),
+    room_add_user(Room#room.users, #occupant{pid=UPid,name=UserName}).
+
+delete_user(State, RoomID, UPid) ->
+    RoomTab = state_get_rooms(State),
+    Room = rooms_lookup(RoomTab, RoomID),
+    room_take_user(Room#room.users, UPid).
+
+move_user(State, OldRoomID, NewRoomID, UPid) when is_pid(UPid) ->
+    RoomTab = state_get_rooms(State),
+    OldRoom = rooms_lookup(RoomTab, OldRoomID),
+    User = room_take_user(OldRoom#room.users, UPid),
+    NewRoom = rooms_lookup(RoomTab, NewRoomID),
+    room_add_user(NewRoom#room.users, User).
+
+move_all(State, OldRoomID, NewRoomID) ->
+    RoomTab = state_get_rooms(State),
+    OldRoom = rooms_lookup(RoomTab, OldRoomID),
+    GetUsers = fun (User, Acc) -> [User|Acc] end,
+    Users = room_fold_users(OldRoom#room.users, GetUsers, []),
+    NewRoom = rooms_lookup(RoomTab, NewRoomID),
+    AddUser = fun (User) ->
+                       room_add_user(NewRoom#room.users, User)
+               end,
+    lists:map(AddUser, Users).
 
 already_exists(State, RoomID) ->
     RoomTab = state_get_rooms(State),
@@ -101,6 +133,12 @@ room_init_users() ->
 
 room_update_bans(RoomTab, RoomID, Bans) ->
     ets:update_element(RoomTab, RoomID, {#room.bans, Bans}).
+
+room_add_user(Occupants, User) ->
+    ets:insert(Occupants, User).
+
+room_take_user(Occupants, UPid) ->
+    ets:take(Occupants, UPid).
 
 room_fold_users(Occupants, Fun, Acc) ->
     ets:foldl(Fun, Acc, Occupants).
