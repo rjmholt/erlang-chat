@@ -7,7 +7,7 @@
 start(Listen, ServerPid) ->
     {ok, Socket} = gen_tcp:accept(Listen),
     SendPid = spawn_link(fun send/2, [Socket, ServerPid]),
-    rpc:cast(?NODE, ?SERVER, join, [SendPid, ?MAINHALL]),
+    rpc:cast(?NODE, ?SERVER, new_connection, [SendPid, ?MAINHALL]),
     listen(Socket).
 
 send(Socket, ServerPid) ->

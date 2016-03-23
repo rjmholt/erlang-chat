@@ -14,8 +14,11 @@
          delete/2,
          rename/3,
          change_room/3,
-         already_exists/2,
-         get_name/2]).
+         already_connected/2,
+         name_taken/2,
+         get_pid/2,
+         get_name/2,
+         get_room/2]).
 
 % initialise/1
 %   - State: server state containing refs to mutable tables
@@ -80,14 +83,28 @@ change_room(State, UPid, NewRoom) ->
     room_delete_user(State, User#user.room, UPid),
     room_add_user(State, NewRoom, User#user{room=NewRoom}).
 
-already_exists(State, UserName) ->
+already_connected(State, UPid) ->
+    UserTab = state_get_users(State),
+    user_member(UserTab, UPid).
+
+name_taken(State, UserName) ->
     NameTab = state_get_names(State),
     name_member(NameTab, UserName).
+
+get_pid(State, UName) ->
+    NameTab = state_get_names(State),
+    NameListing = name_lookup(NameTab, UName),
+    NameListing#name_upid.pid.
 
 get_name(State, UPid) ->
     UserTab = state_get_users(State),
     User = user_lookup(UserTab, UPid),
     User#user.name.
+
+get_room(State, UPid) ->
+    UserTab = state_get_users(State),
+    User = user_lookup(UserTab, UPid),
+    User#user.room.
 
 %% USER STORAGE INTERFACE
 %
@@ -108,6 +125,9 @@ user_lookup(UserTab, UPid) ->
             none
     end.
 
+user_member(UserTab, UPid) ->
+    ets:member(UserTab, UPid).
+
 user_update_name(UserTab, UPid, Name) ->
     ets:update_element(UserTab, UPid, {#user.name, Name}).
 
@@ -120,8 +140,7 @@ name_init_table() ->
     ets:new(names, [{keypos, #name_upid.name}]).
 
 name_insert(NameTab, NameEntry) ->
-    [Name] = ets:insert(NameTab, NameEntry),
-    Name.
+    ets:insert(NameTab, NameEntry).
 
 name_delete(NameTab, Name) ->
     ets:delete(NameTab, Name).
@@ -163,7 +182,7 @@ room_delete_user(State, Room, UPid) ->
 %% FUNCTIONS FOR GUEST NAME GENERATION
 %
 new_guest_name(NameTab) ->
-    Nums = name_fold(fun get_guest_num_list/2, [], NameTab),
+    Nums = name_fold(NameTab, fun get_guest_num_list/2, []),
     SortedNums = lists:sort(Nums),
     NewGuestNum = lowest_not_in_list(SortedNums),
     NumBin = list_to_binary(integer_to_list(NewGuestNum)),

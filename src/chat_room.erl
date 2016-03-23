@@ -10,14 +10,16 @@
          send/3,
          create/3,
          delete/2,
+         exists/2,
          add_user/4,
          delete_user/3,
          move_user/4,
          move_all/3,
+         fold_all/4,
          already_exists/2,
          is_owned_by/3,
          ban/4,
-         get_contents/2,
+         list_in_room/2,
          list_all/1]).
 
 initialise(State) ->
@@ -39,6 +41,10 @@ create(State, RoomID, Owner) ->
 delete(State, RoomID) ->
     RoomTab = state_get_rooms(State),
     rooms_delete(RoomTab, RoomID).
+
+exists(State, RoomID) ->
+    RoomTab = state_get_rooms(State),
+    rooms_member(RoomTab, RoomID).
 
 add_user(State, RoomID, UPid, UserName) ->
     RoomTab = state_get_rooms(State),
@@ -68,6 +74,11 @@ move_all(State, OldRoomID, NewRoomID) ->
                end,
     lists:map(AddUser, Users).
 
+fold_all(State, RoomID, Fun, Acc) ->
+    RoomTab = state_get_rooms(State),
+    Room = rooms_lookup(RoomTab, RoomID),
+    room_fold_users(Room#room.users, Fun, Acc).
+
 already_exists(State, RoomID) ->
     RoomTab = state_get_rooms(State),
     rooms_member(RoomTab, RoomID).
@@ -85,7 +96,7 @@ ban(State, RoomID, UPid, Time) ->
     timer:apply_after(Time, ?MODULE, room_delete_ban,
                       [RoomTab, RoomID,UPid]).
 
-get_contents(State, RoomID) ->
+list_in_room(State, RoomID) ->
     RoomTab = state_get_rooms(State),
     GetNames = fun (User, Acc) ->
                        Name = User#occupant.name,
@@ -105,6 +116,8 @@ list_all(State) ->
                  end,
     rooms_fold(RoomTab, GetRoomIDs, []).
 
+% Room storage interface functions (mask ETS)
+
 rooms_init() ->
     ets:new(rooms, [{keypos, #room.name}]).
 
@@ -118,7 +131,7 @@ rooms_member(RoomTab, RoomID) ->
     ets:member(RoomTab, RoomID).
 
 rooms_lookup(RoomTab, RoomID) ->
-    case ets:member(RoomTab, RoomID) of
+    case ets:lookup(RoomTab, RoomID) of
         [Room] ->
             Room;
         [] ->
@@ -143,11 +156,15 @@ room_take_user(Occupants, UPid) ->
 room_fold_users(Occupants, Fun, Acc) ->
     ets:foldl(Fun, Acc, Occupants).
 
+% State interface functions
+
 state_get_rooms(State) ->
     chat_state:get_table(State, rooms).
 
 state_init_rooms(State, RoomTab) ->
     chat_state:add_table(State, RoomTab, rooms).
+
+% Auxiliary functions
 
 room_delete_ban(RoomTab, RoomID, UPid) ->
     Room = rooms_lookup(RoomTab, RoomID),
