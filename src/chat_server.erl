@@ -14,7 +14,10 @@
          handle_info/2, terminate/2, code_change/3]).
 
 % Server API definitions
-start(Port) -> gen_server:start_link({local, ?SERVER}, ?MODULE, [Port], []).
+start(Port) -> gen_server:start_link({local, ?SERVER},
+                                     ?MODULE,
+                                     [Port],
+                                     [process_flag(trap_exit, true)]).
 stop() -> gen_server:call(?MODULE, stop).
 handle_msg(Pid, Msg) -> gen_server:cast(?MODULE, {Pid, Msg}).
 new_connection(Pid) -> gen_server:cast(?MODULE, {Pid, new_connection}).
@@ -23,7 +26,7 @@ new_connection(Pid) -> gen_server:cast(?MODULE, {Pid, new_connection}).
 init([Port]) ->
     InitState = chat_state:initialise(),
     chat_room:create(InitState, ?MAINHALL, <<"">>),
-    chat_listener:start(Port, self()),
+    spawn_link(chat_listener, start, [Port, self()]),
     {ok, InitState}.
 
 % TODO: Put connection shutdown here perhaps, or just link processes
@@ -37,10 +40,8 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 % ========= Server functionality -- Cast handling ==========
 handle_cast({From, new_connection}, State) ->
     Name = chat_user:create(State, From),
-    NewIdentMsg = #newidentity{identity=Name,former= <<>>},
-    From ! NewIdentMsg,
-    RmChgMsg = #roomchange{identity=Name,roomid=?MAINHALL,former= <<>>},
-    From ! RmChgMsg,
+    From ! chat_message:newidentity(self(), Name, <<>>),
+    From ! chat_message:roomchange(self(), Name, ?MAINHALL, <<>>),
     chat_room:add_user(State, ?MAINHALL, From, Name),
     {noreply, State};
 
@@ -49,13 +50,12 @@ handle_cast({From, #join{roomid=RoomID}}, State) ->
     Former = chat_user:get_room(State, From),
     case chat_room:exists(RoomID) of
         true ->
-            Msg = #roomchange{identity=UName,roomid=RoomID,former=Former},
+            Msg = chat_message:roomchange(self(), UName, RoomID, Former),
             chat_room:send(State, Former, Msg),
             chat_room:send(State, RoomID, Msg),
             chat_user:change_room(State, From, RoomID);
         false ->
-            Msg = #roomchange{identity=UName,roomid=Former,former=Former},
-            From ! Msg
+            From ! chat_message:roomchange(self(), UName, Former, Former)
     end,
     {noreply, State};
 
@@ -65,9 +65,10 @@ handle_cast({From, #delete{roomid=RoomID}}, State) ->
         true ->
             MsgFun = fun (User, _) ->
                              UName = User#occupant.name,
-                             Msg = #roomchange{identity=UName,
-                                               roomid=?MAINHALL,
-                                               former=RoomID},
+                             Msg = chat_message:roomchange(self(),
+                                                           UName,
+                                                           ?MAINHALL,
+                                                           RoomID),
                              User#occupant.pid ! Msg
                      end,
             chat_room:fold_all(State, RoomID, MsgFun, not_used),
@@ -76,7 +77,7 @@ handle_cast({From, #delete{roomid=RoomID}}, State) ->
             no_action
     end,
     RmList = chat_room:list_all(State),
-    From ! #roomlist{rooms=RmList},
+    From ! chat_message:roomlist(self(), RmList),
     {noreply, State};
 
 handle_cast({From, #kick{roomid=RoomID, time=Time, identity=Ident}}, State) ->
@@ -84,7 +85,7 @@ handle_cast({From, #kick{roomid=RoomID, time=Time, identity=Ident}}, State) ->
         true ->
             UPid = chat_user:get_pid(State, Ident),
             OldRoomID = chat_user:get_room(State, Ident),
-            Msg = #roomchange{identity=Ident,roomid=?MAINHALL,former=RoomID},
+            Msg = chat_message:roomchange(self(),Ident,?MAINHALL,RoomID),
             chat_user:send(State, UPid, Msg),
             chat_room:move_user(State, OldRoomID, RoomID, UPid),
             chat_room:ban(State, RoomID, UPid, Time);
@@ -92,14 +93,14 @@ handle_cast({From, #kick{roomid=RoomID, time=Time, identity=Ident}}, State) ->
             no_action
     end,
     RmContents = chat_room:list_in_room(State, RoomID),
-    UName = chat_user:get_name(State, From),
-    From ! #roomcontents{roomid=RoomID,owner=UName,identities=RmContents},
+    Owner = chat_room:get_owner(State, RoomID),
+    From ! chat_message:roomcontents(self(),RoomID,Owner,RmContents),
     {noreply, State};
 
 handle_cast({From, #message{content=Content}}, State) ->
     UName = chat_user:get_name(From),
     RoomID = chat_user:get_room(State, From),
-    Msg = #serv_msg{content=Content,identity=UName},
+    Msg = chat_message:message(self(),Content,UName),
     chat_room:send(State, RoomID, Msg),
     {noreply, State};
 
@@ -107,14 +108,26 @@ handle_cast({From, #identitychange{identity=Identity}}, State) ->
     UName = chat_user:get_name(State, From),
     case chat_user:name_taken(State, Identity) of
         true ->
-            Msg = #newidentity{identity=UName,former=UName},
-            From ! Msg;
+            From ! chat_message:newidentity(self(),UName, UName);
         false ->
-            Msg = #newidentity{identity=Identity,former=UName},
+            Msg = chat_message:newidentity(self(),Identity, UName),
             RoomID = chat_user:get_room(State, From),
             chat_room:send(State, RoomID, Msg)
     end,
     {noreply, State};
+
+handle_cast({From, list}, State) ->
+    RmList = chat_room:list_all(State),
+    From ! chat_message:roomlist(self(), RmList);
+
+handle_cast({From, quit}, State) ->
+    UName = chat_user:get_name(State, From),
+    RoomID = chat_user:get_room(State, From),
+    Msg = chat_message:roomchange(UName, <<>>, RoomID),
+    chat_room:send(State, RoomID, Msg),
+    chat_room:delete_user(State, RoomID, From),
+    chat_user:delete(State, From),
+    chat_room:remove_owner(State, From);
 
 handle_cast({From, Msg}, State) ->
     Reply = io_lib:format("~s: ~p~n", ["Unsupported message", Msg]),

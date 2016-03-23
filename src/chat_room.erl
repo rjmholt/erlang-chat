@@ -17,7 +17,9 @@
          move_all/3,
          fold_all/4,
          already_exists/2,
+         get_owner/2,
          is_owned_by/3,
+         remove_owner/2,
          ban/4,
          list_in_room/2,
          list_all/1]).
@@ -83,10 +85,31 @@ already_exists(State, RoomID) ->
     RoomTab = state_get_rooms(State),
     rooms_member(RoomTab, RoomID).
 
+get_owner(State, RoomID) ->
+    RoomTab = state_get_rooms(State),
+    Room = rooms_lookup(RoomTab, RoomID),
+    Room#room.owner.
+
 is_owned_by(State, RoomID, UPid) ->
     RoomTab = state_get_rooms(State),
     Room = rooms_lookup(RoomTab, RoomID),
     Room#room.owner =:= UPid.
+
+remove_owner(State, UPid) ->
+    RoomTab = state_get_rooms(State),
+    FindOwnerF = fun (Room, Acc) ->
+                    case Room#room.owner of
+                        UPid ->
+                            [Room#room.name | Acc];
+                        _ ->
+                            Acc
+                    end
+                 end,
+    OwnedRooms = rooms_fold(RoomTab, FindOwnerF, []),
+    UpdateOwnerF = fun (RoomID) ->
+                    rooms_remove_owner(RoomTab, RoomID)
+                   end,
+    lists:map(UpdateOwnerF, OwnedRooms).
 
 ban(State, RoomID, UPid, Time) ->
     RoomTab = state_get_rooms(State),
@@ -137,6 +160,9 @@ rooms_lookup(RoomTab, RoomID) ->
         [] ->
             none
     end.
+
+rooms_remove_owner(RoomTab, RoomID) ->
+    ets:update_element(RoomTab, RoomID, {#room.owner, <<>>}).
 
 rooms_fold(RoomTab, Fun, Acc) ->
     ets:foldl(Fun, Acc, RoomTab).
