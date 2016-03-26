@@ -1,93 +1,63 @@
--module(chat_client).
+-module(chat_client_main).
 
 -author('Robert Holt').
 
--export([start/2]).
+-behaviour(gen_server).
 
+-include("include/client_structure.hrl").
+
+-export([start/2, deliver/1]).
+
+-export([init/1, handle_call/3, handle_cast/2,
+        handle_info/2, terminate/2, code_change/3]).
+
+% Client API
 start(HostName, Port) ->
-    Connection = chat_client_connection:connect(self(), HostName, Port),
-    {Name, Room} = await_welcome(Connection),
-    loop(Connection, Name, Room).
+    gen_server:start_link({local, ?CLIENT}, ?MODULE, [HostName, Port], []).
 
-loop(Connection, PrevName, PrevRoom) ->
-    {Name, Room} = receive
-        {Connection, Msg} ->
-                           operate(PrevName, PrevRoom, Msg)
-                   after 0 ->
-                           {PrevName, PrevRoom}
-                   end,
-    try 
-        prompt(Name, Room)
-    of
-        Resp ->
-            Connection ! Resp
-    catch
-        _ ->
-            io:format("~p~n", ["Invalid message"])
-    end,
-    loop(Connection, Name, Room).
+deliver(Msg) -> gen_server:cast(?CLIENT, {chat, Msg}).
+
+% gen_server definitions
+init([HostName, Port]) ->
+    Connection = chat_client_in:start(HostName, Port),
+    {Name, Room} = await_welcome(Connection),
+    {ok, Name, Room}.
+
+terminate(_Reason, _State) -> init:stop().
+
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
+
+handle_info(_Info, State) -> {noreply, State}.
+
+handle_call(stop, _From, State) -> {stop, normal, stopped, State}.
+
+handle_cast({chat, #{<<"type">> := <<"message">>,
+                     <<"identity">> := Identity,
+                     <<"content">> := Content}}, {Name, Room}) ->
+    io:format("~s: ~s", [Identity, Content]),
+    {noreply, {Name, Room}}.
 
 await_welcome(Connection) ->
     Name = receive 
-               {Connection, #{<<"type">> := <<"newidentity">>,
-                       <<"identity">> := ID,
-                       <<"former">> := <<>>}} -> ID
+               {Connection,
+                #{<<"type">> := <<"newidentity">>,
+                  <<"identity">> := ID,
+                  <<"former">> := <<>>}} -> ID
+           after
+               2000 ->
+                   erlang:display("Ident handshake timeout"),
+                   init:stop()
            end,
     Room = receive
                {Connection, #{<<"type">> := <<"roomchange">>,
                               <<"roomid">> := Rm,
                               <<"former">> := <<>>}} -> Rm
+           after
+               2000 ->
+                   erlang:display("Room handshake timeout"),
+                   init:stop()
            end,
     {Name, Room}.
-
-prompt(Name, Room) ->
-    Input = io:get_line(<<"[",Room/utf8,"] ",Name/utf8,"> ">>),
-    parse_input(Input).
-
-parse_input(Input) ->
-    case string:substr(Input, 1, 1) of
-        "#" ->
-            do_command(Input);
-        _ ->
-            #{type => message, content => Input}
-    end.
-
-do_command(Line) ->
-    CmdString = string:substr(Line, 2),
-    [Cmd|Tkns] = string:tokens(CmdString, " "),
-    case Cmd of
-        "join" ->
-            [RoomID] = Tkns,
-            #{type => join, roomid => RoomID};
-        "delete" ->
-            [RoomID] = Tkns,
-            #{type => delete, roomid => RoomID};
-        "kick" ->
-            [RoomID, Time, Identity] = Tkns,
-            #{type => kick, roomid => RoomID,
-              time => string:to_integer(Time),
-              identity => Identity};
-        "identitychange" ->
-            [Identity] = Tkns,
-            #{type => identitychange,
-              identity => Identity};
-        "createroom" ->
-            [Identity, RoomID] = Tkns,
-            #{type => createroom,
-              roomid => RoomID,
-              identity => Identity};
-        "who" ->
-            [RoomID] = Tkns,
-            #{type => who, roomid => RoomID};
-        "list" ->
-            [] = Tkns,
-            #{type => list};
-        "quit" ->
-            [] = Tkns,
-            #{type => quit};
-        _ ->
-            #{type => message, content => Line}
-    end.
 
 operate(PrevName, PrevRoom, Msg) ->
     case Msg of
@@ -145,3 +115,25 @@ operate(PrevName, PrevRoom, Msg) ->
             io:format("Unsupported message: ~p~n", [Msg]),
             {PrevName, PrevRoom}
     end.
+
+print_roomlist([{RmName, NumOcc}]) -> io:format("~s: ~s~n", [RmName, NumOcc]);
+print_roomlist([{RmName, NumOcc}|RmList]) ->
+    io:format("~s: ~s, ", [RmName, NumOcc]),
+    print_roomlist(RmList).
+
+print_roomcontents(RoomID, Owner, Occs) ->
+    io:format("~s contains", [RoomID]),
+    print_room_occupants(Owner, Occs).
+
+print_room_occupants(_, []) -> io:format("~n");
+print_room_occupants(Owner, [Occ]) ->
+    case Occ of
+        Owner -> io:format(" ~s*", [Owner]);
+        _     -> io:format(" ~s", [Occ])
+    end;
+print_room_occupants(Owner, [Occ|OccList]) ->
+    case Occ of
+        Owner -> io:format(" ~s*", [Owner]);
+        _     -> io:format(" ~s", [Occ])
+    end,
+    print_room_occupants(Owner, OccList).

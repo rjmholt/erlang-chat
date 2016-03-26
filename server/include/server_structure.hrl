@@ -11,5 +11,7 @@
 -define(NODE, robchat).
 % Central server name
 -define(SERVER, chat_server).
+% Name server
+-define(NAMESERVER, nameserver).
 % Server entry room/base room
 -define(MAINHALL, <<"MainHall"/utf8>>).
