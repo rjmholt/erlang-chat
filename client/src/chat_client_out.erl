@@ -33,5 +33,5 @@ handle_call(stop, _From, State) -> {stop, normal, stopped, State}.
 
 handle_cast({chat, Msg}, Socket) ->
     Bin = jiffy:encode(Msg),
-    gen_tcp:send(Socket, <<Bin/binary, "\n"/utf8>>),
+    gen_tcp:send(Socket, Bin),
     {noreply, Socket}.

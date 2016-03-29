@@ -2,9 +2,29 @@
 
 -author('Robert Holt').
 
+-define(PROMPT, chat_prompt).
+
+-export([start/2]).
+
+start(Name, Room) ->
+    prompt(Name, Room).
+
 prompt(Name, Room) ->
-    Input = io:get_line(<<"[",Room/utf8,"] ",Name/utf8,"> ">>),
-    parse_input(Input).
+    {NewName, NewRoom} = receive
+                             {update, Nm, Rm} ->
+                                 {Nm, Rm}
+                         after
+                             1 ->
+                                 {Name, Room}
+                         end,
+    Input = io:get_line(<<"[",NewRoom/binary,"] ",NewName/binary,"> ">>),
+    try parse_input(Input) of
+        Msg ->
+            chat_client_out:send(Msg)
+    catch
+        _ -> io:format("Bad command")
+    end,
+    prompt(NewName, NewRoom).
 
 parse_input(Input) ->
     case string:substr(Input, 1, 1) of

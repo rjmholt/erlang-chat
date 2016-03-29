@@ -6,21 +6,24 @@
 
 -include("include/client_structure.hrl").
 
--export([start/2, deliver/1]).
+-export([start/2, deliver/2]).
 
 -export([init/1, handle_call/3, handle_cast/2,
         handle_info/2, terminate/2, code_change/3]).
 
 % Client API
 start(HostName, Port) ->
-    gen_server:start_link({local, ?CLIENT}, ?MODULE, [HostName, Port], []).
+    gen_server:start_link(?MODULE, [HostName, Port], []).
 
-deliver(Msg) -> gen_server:cast(?CLIENT, {chat, Msg}).
+deliver(Pid, Msg) -> gen_server:cast(Pid, {chat, Msg}).
 
 % gen_server definitions
 init([HostName, Port]) ->
-    Connection = chat_client_in:start(HostName, Port),
-    {Name, Room} = await_welcome(Connection),
+    spawn_link(node(), chat_client_in, start, [self(), HostName, Port]),
+    {Name, Room} = await_welcome(),
+    io:format("Handshaken~n"),
+    spawn_link(node(), chat_client_prompt, start, [Name, Room]),
+    io:format("prompt started~n"),
     {ok, Name, Room}.
 
 terminate(_Reason, _State) -> init:stop().
@@ -37,26 +40,29 @@ handle_cast({chat, #{<<"type">> := <<"message">>,
     io:format("~s: ~s", [Identity, Content]),
     {noreply, {Name, Room}}.
 
-await_welcome(Connection) ->
+await_welcome() ->
+    io:format("awaiting welcome~n"),
     Name = receive 
-               {Connection,
+               {init_name,
                 #{<<"type">> := <<"newidentity">>,
                   <<"identity">> := ID,
-                  <<"former">> := <<>>}} -> ID
+                  <<"former">> := <<>>}} -> io:format("ID received~n"), ID
            after
-               2000 ->
-                   erlang:display("Ident handshake timeout"),
+               5000 ->
+                   io:format("Ident handshake timeout~n"),
                    init:stop()
            end,
     Room = receive
-               {Connection, #{<<"type">> := <<"roomchange">>,
+               {init_room, #{<<"type">> := <<"roomchange">>,
                               <<"roomid">> := Rm,
-                              <<"former">> := <<>>}} -> Rm
+                              <<"former">> := <<>>}} -> io:format("Room recvd"),
+                                                        Rm
            after
-               2000 ->
-                   erlang:display("Room handshake timeout"),
+               5000 ->
+                   io:format("Room handshake timeout~n"),
                    init:stop()
            end,
+    io:format("roomchg received~n"),
     {Name, Room}.
 
 operate(PrevName, PrevRoom, Msg) ->

@@ -3,5 +3,6 @@
      {included_applications, [jiffy]},
      {modules, [chat_client_main,
                 chat_client_in,
-                chat_client_out]},
+                chat_client_out,
+                chat_client_prompt]},
      {mod, {chat_client_main, 8888}}]}.
