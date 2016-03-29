@@ -10,12 +10,12 @@ start(Name, Room) ->
     prompt(Name, Room).
 
 prompt(Name, Room) ->
+    io:format("Prompting~n"),
     {NewName, NewRoom} = receive
                              {update, Nm, Rm} ->
                                  {Nm, Rm}
-                         after
-                             1 ->
-                                 {Name, Room}
+                         after 0 ->
+                                   {Name, Room}
                          end,
     Input = io:get_line(<<"[",NewRoom/binary,"] ",NewName/binary,"> ">>),
     try parse_input(Input) of
@@ -31,7 +31,7 @@ parse_input(Input) ->
         "#" ->
             do_command(Input);
         _ ->
-            #{type => message, content => Input}
+            #{type => message, content => list_to_binary(Input)}
     end.
 
 do_command(Line) ->
@@ -40,27 +40,27 @@ do_command(Line) ->
     case Cmd of
         "join" ->
             [RoomID] = Tkns,
-            #{type => join, roomid => RoomID};
+            #{type => join, roomid => list_to_binary(RoomID)};
         "delete" ->
             [RoomID] = Tkns,
-            #{type => delete, roomid => RoomID};
+            #{type => delete, roomid => list_to_binary(RoomID)};
         "kick" ->
             [RoomID, Time, Identity] = Tkns,
-            #{type => kick, roomid => RoomID,
+            #{type => kick, roomid => list_to_binary(RoomID),
               time => string:to_integer(Time),
-              identity => Identity};
+              identity => list_to_binary(Identity)};
         "identitychange" ->
             [Identity] = Tkns,
             #{type => identitychange,
-              identity => Identity};
+              identity => list_to_binary(Identity)};
         "createroom" ->
             [Identity, RoomID] = Tkns,
             #{type => createroom,
-              roomid => RoomID,
-              identity => Identity};
+              roomid => list_to_binary(RoomID),
+              identity => list_to_binary(Identity)};
         "who" ->
             [RoomID] = Tkns,
-            #{type => who, roomid => RoomID};
+            #{type => who, roomid => list_to_binary(RoomID)};
         "list" ->
             [] = Tkns,
             #{type => list};
@@ -68,6 +68,6 @@ do_command(Line) ->
             [] = Tkns,
             #{type => quit};
         _ ->
-            #{type => message, content => Line}
+            #{type => message, content => list_to_binary(Line)}
     end.
 

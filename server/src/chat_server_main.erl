@@ -4,9 +4,16 @@
 
 -include("include/server_structure.hrl").
 
--export([start/1, start_debug/0]).
+% Application API
+-export([start/2, stop/1]).
 
-start(Port) ->
+-export([run/1, start_debug/0]).
+
+start(normal, [Port]) -> run(Port).
+
+stop(_) -> init:stop().
+
+run(Port) ->
     % TODO: Start supervisor rather than nameserver
     chat_server_nameserver:start(),
     RPid = chat_server_room:create_registered(mainhall, ?MAINHALL, <<>>),

@@ -6,4 +6,4 @@
                 chat_server_nameserver,
                 chat_server_room,
                 chat_server_sender]},
-     {mod, {chat_server_main, 8888}}]}.
+     {mod, {chat_server_main, [8888]}}]}.

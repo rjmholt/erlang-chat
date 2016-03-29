@@ -6,13 +6,20 @@
 
 -include("include/client_structure.hrl").
 
--export([start/2, deliver/2]).
+-export([start/2, stop/1]).
+
+-export([run/2, deliver/2]).
 
 -export([init/1, handle_call/3, handle_cast/2,
         handle_info/2, terminate/2, code_change/3]).
 
+% Application API
+start(normal, [Host, Port]) -> run(Host, Port).
+
+stop(_) -> init:stop().
+
 % Client API
-start(HostName, Port) ->
+run(HostName, Port) ->
     gen_server:start_link(?MODULE, [HostName, Port], []).
 
 deliver(Pid, Msg) -> gen_server:cast(Pid, {chat, Msg}).
@@ -55,7 +62,7 @@ await_welcome() ->
     Room = receive
                {init_room, #{<<"type">> := <<"roomchange">>,
                               <<"roomid">> := Rm,
-                              <<"former">> := <<>>}} -> io:format("Room recvd"),
+                              <<"former">> := <<>>}} -> io:format("Room recvd~n"),
                                                         Rm
            after
                5000 ->
