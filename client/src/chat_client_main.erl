@@ -8,13 +8,14 @@
 
 -export([start/2, stop/1]).
 
--export([run/2, deliver/2]).
+-export([deliver/2]).
 
 -export([init/1, handle_call/3, handle_cast/2,
         handle_info/2, terminate/2, code_change/3]).
 
 % Application API
-start(normal, [Host, Port]) -> run(Host, Port).
+start(normal, [Host, Port]) -> run(Host, Port);
+start(normal, [Pid]) -> run(Pid).
 
 stop(_) -> init:stop().
 
@@ -22,16 +23,22 @@ stop(_) -> init:stop().
 run(HostName, Port) ->
     gen_server:start_link(?MODULE, [HostName, Port], []).
 
+run(Pid) -> gen_server:start_link(?MODULE, [Pid], []).
+
 deliver(Pid, Msg) -> gen_server:cast(Pid, {chat, Msg}).
 
 % gen_server definitions
 init([HostName, Port]) ->
     spawn_link(node(), chat_client_in, start, [self(), HostName, Port]),
     {Name, Room} = await_welcome(),
-    io:format("Handshaken~n"),
-    spawn_link(node(), chat_client_prompt, start, [Name, Room]),
-    io:format("prompt started~n"),
-    {ok, Name, Room}.
+    spawn_link(node(), chat_client_prompt, start, [Name, Room, []]),
+    {ok, {Name, Room}};
+
+init([Pid]) ->
+    spawn_link(node(), chat_client_in, start, [self(), Pid]),
+    {Name, Room} = await_welcome(),
+    spawn_link(node(), chat_client_prompt, start, [Name, Room, [process_mode]]),
+    {ok, {Name, Room}}.
 
 terminate(_Reason, _State) -> init:stop().
 
@@ -48,12 +55,11 @@ handle_cast({chat, #{<<"type">> := <<"message">>,
     {noreply, {Name, Room}}.
 
 await_welcome() ->
-    io:format("awaiting welcome~n"),
     Name = receive 
                {init_name,
                 #{<<"type">> := <<"newidentity">>,
                   <<"identity">> := ID,
-                  <<"former">> := <<>>}} -> io:format("ID received~n"), ID
+                  <<"former">> := <<>>}} -> ID
            after
                5000 ->
                    io:format("Ident handshake timeout~n"),
@@ -62,14 +68,12 @@ await_welcome() ->
     Room = receive
                {init_room, #{<<"type">> := <<"roomchange">>,
                               <<"roomid">> := Rm,
-                              <<"former">> := <<>>}} -> io:format("Room recvd~n"),
-                                                        Rm
+                              <<"former">> := <<>>}} -> Rm
            after
                5000 ->
                    io:format("Room handshake timeout~n"),
                    init:stop()
            end,
-    io:format("roomchg received~n"),
     {Name, Room}.
 
 operate(PrevName, PrevRoom, Msg) ->

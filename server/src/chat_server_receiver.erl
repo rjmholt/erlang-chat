@@ -29,7 +29,10 @@ process_receive(Pid, SendPid, Name, RmPid) ->
     {NewName, NewRmPid} =
     receive
         {Pid, Msg} ->
-            process_msg(SendPid, Name, RmPid, Msg)
+            erlang:display({Pid, Msg}),
+            process_msg(SendPid, Name, RmPid, Msg);
+        Other ->
+            erlang:display(Other)
     end,
     process_receive(Pid, SendPid, NewName, NewRmPid).
 
@@ -54,4 +57,5 @@ process_msg(_, Name, RmPid,
               <<"content">> := Content}) ->
     Resp = #{<<"type">> => <<"message">>,
              <<"content">> => Content, <<"identity">> => Name},
-    chat_server_room:send(RmPid, Resp).
+    chat_server_room:send(RmPid, Resp),
+    {Name, RmPid}.

@@ -9,16 +9,23 @@
 
 -export([run/1, start_debug/0]).
 
-start(normal, [Port]) -> run(Port).
+start(normal, [Port]) -> run(Port);
+start(normal, []) -> run().
 
 stop(_) -> init:stop().
 
 run(Port) ->
     % TODO: Start supervisor rather than nameserver
     chat_server_nameserver:start(),
+    {ok, RPid} = chat_server_room:create_registered(mainhall, ?MAINHALL, <<>>),
+    chat_server_nameserver:add_room(?MAINHALL, RPid),
+    chat_server_listener:start(Port).
+
+run() ->
+    chat_server_nameserver:start(),
     RPid = chat_server_room:create_registered(mainhall, ?MAINHALL, <<>>),
     chat_server_nameserver:add_room(?MAINHALL, RPid),
-    chat_server_connection:start(Port).
+    chat_server_listener:start().
 
 start_debug() ->
     chat_server_nameserver:start(),

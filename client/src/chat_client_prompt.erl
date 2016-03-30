@@ -4,13 +4,15 @@
 
 -define(PROMPT, chat_prompt).
 
--export([start/2]).
+-export([start/3]).
 
-start(Name, Room) ->
-    prompt(Name, Room).
+start(Name, Room, []) ->
+    prompt(Name, Room);
+
+start(Name, Room, [process_mode]) ->
+    proc_prompt(Name, Room).
 
 prompt(Name, Room) ->
-    io:format("Prompting~n"),
     {NewName, NewRoom} = receive
                              {update, Nm, Rm} ->
                                  {Nm, Rm}
@@ -21,6 +23,23 @@ prompt(Name, Room) ->
     try parse_input(Input) of
         Msg ->
             chat_client_out:send(Msg)
+    catch
+        _ -> io:format("Bad command")
+    end,
+    prompt(NewName, NewRoom).
+
+proc_prompt(Name, Room) ->
+    {NewName, NewRoom} =
+    receive
+        {update, Nm, Rm} ->
+            {Nm, Rm}
+    after 0 ->
+              {Name, Room}
+    end,
+    Input = io:get_line(<<"[",NewRoom/binary,"] ",NewName/binary,"> ">>),
+    try parse_input(Input) of
+        Msg ->
+            chat_client_procout:send(Msg)
     catch
         _ -> io:format("Bad command")
     end,

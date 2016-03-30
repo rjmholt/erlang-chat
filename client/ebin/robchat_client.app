@@ -4,5 +4,6 @@
      {modules, [chat_client_main,
                 chat_client_in,
                 chat_client_out,
+                chat_client_procout,
                 chat_client_prompt]},
      {mod, {chat_client_main, ["localhost", 8888]}}]}.

@@ -80,7 +80,7 @@ handle_call(stop, _From, State) ->
     {stop, normal, stopped, State};
 
 handle_call({join, UPid}, _From, State) when is_pid(UPid) ->
-    RmPid = chat_server_nameserver:get_roompid(State#room.name),
+    {ok, RmPid} = chat_server_nameserver:get_roompid(State#room.name),
     {reply, {ok, RmPid},
              State#room{occupants = [UPid|State#room.occupants]}};
 

@@ -22,6 +22,7 @@ socket_loop(Socket) ->
 
 process_loop(Pid) ->
     receive {send, Msg} ->
+                erlang:display(Msg),
                 Pid ! Msg
     end,
     process_loop(Pid).
