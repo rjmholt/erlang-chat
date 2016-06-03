@@ -1,2 +1,0 @@
--define(CLIENT, client_main).
--define(CONNECTION, client_connection).
