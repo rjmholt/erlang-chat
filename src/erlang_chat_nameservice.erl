@@ -24,6 +24,7 @@
 
 -define(SERVER, ?MODULE).
 -define(MAINHALL, <<"MainHall">>).
+-define(GUEST, "guest").
 
 % The globally required details of a room
 -record(room, {name, pid, users=#{}}).
@@ -162,6 +163,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Add a new user to the user name table
+%%
+%% @spec add_user(UserTable, UserRecord) -> boolean()
+%% @end
+%%--------------------------------------------------------------------
+add_user(UserTable, UserRecord) ->
+    ets:insert_new(UserTable, UserRecord).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Generate a new guest username, based on the usernames already in use
 %%
 %% @spec generate_new_username(UserTable) -> binary()
@@ -170,7 +182,7 @@ code_change(_OldVsn, State, _Extra) ->
 generate_new_username(UserTable) ->
     Num = get_lowest_unused_guest_num(UserTable),
     NumBin = list_to_binary(integer_to_list(Num)),
-    <<"guest", NumBin>>.
+    <<?GUEST, NumBin>>.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -187,7 +199,7 @@ get_lowest_unused_guest_num(UserTable) ->
 collect_guest_num(UserEntry, NumList) ->
     Name = UserEntry#user.name,
     case Name of
-        <<"guest", NumBin/binary>> ->
+        <<?GUEST, NumBin/binary>> ->
             Num = list_to_integer(binary_to_list(NumBin)),
             [Num | NumList];
         _ ->
