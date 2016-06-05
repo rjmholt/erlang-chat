@@ -6,5 +6,7 @@
 */deps
 */_rel
 */rel
+relx
 relx.config
 *.d
+.erlang.mk
