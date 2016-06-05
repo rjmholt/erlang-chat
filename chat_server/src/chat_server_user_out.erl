@@ -4,15 +4,15 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 2016-06-03 22:13:26.265562
+%%% Created : 2016-06-05 16:14:20.928854
 %%%-------------------------------------------------------------------
--module(server_room).
+-module(chat_server_user_out).
 
 -behaviour(gen_server).
 
 %% API
--export([new/2,
-         chat_message/3]).
+-export([start_link/1,
+         send_message/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,31 +24,31 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {name, users = #{}, owner = <<>>}).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new room service
+%% Starts the server
 %%
-%% @spec new() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-new(ServerName, Owner) ->
-    gen_server:start_link(?MODULE, [ServerName, Owner], []).
+start_link(Socket) ->
+    gen_server:start_link(?MODULE, [Socket], []).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to all users in the room
+%% Send a message out as a JSON packet. Message should be a map of the
+%% format:
+%%  #{ type => <message-type>, ...}
 %%
-%% @spec chat_message(RoomPid, SenderName, Message) -> noreply
+%% @spec send_message(ServerPid, Message) -> noreply
 %% @end
 %%--------------------------------------------------------------------
-chat_message(RoomPid, SenderName, Message) ->
-    gen_server:cast(RoomPid, {chat_message, SenderName, Message}).
+send_message(ServerPid, Message) ->
+    gen_server:cast(ServerPid, {message, Message}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,8 +65,8 @@ chat_message(RoomPid, SenderName, Message) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ServerName, Owner]) ->
-    {ok, #state{name=ServerName, owner=Owner}}.
+init([Socket]) ->
+    {ok, Socket}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -96,12 +96,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({chat_message, SenderName, Message}, State) ->
-    OutMsg = #{type => message, identity => SenderName, message => Message},
-    send_all(State#state.users, OutMsg);
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast({message, Msg}, Socket) ->
+    Bin = jiffy:encode(Msg),
+    gen_tcp:send(Socket, Bin),
+    {noreply, Socket}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -145,14 +143,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Send a message to all users in the room
-%%
-%% @spec send_all(UserMap, Message) -> term()
-%% @end
-%%--------------------------------------------------------------------
-send_all(UserMap, Message) ->
-    SendOne = fun (UPid, _) -> UPid ! Message end,
-    maps:map(SendOne, UserMap).
+
+
+

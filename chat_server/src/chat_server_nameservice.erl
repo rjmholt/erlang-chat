@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 2016-06-03 18:55:42.370790
 %%%-------------------------------------------------------------------
--module(server_nameservice).
+-module(chat_server_nameservice).
 
 -behaviour(gen_server).
 
@@ -89,7 +89,7 @@ get_room(RoomName) ->
 %%--------------------------------------------------------------------
 init([]) ->
     State    = #state{},
-    {ok, MainHall} = server_room:new(?MAINHALL),
+    {ok, MainHall} = chat_server_room:new(?MAINHALL, <<>>),
     MH_Entry = #room{name=?MAINHALL, pid=MainHall},
     ets:insert(State#state.rooms, MH_Entry),
     {ok, State}.
@@ -201,8 +201,9 @@ get_room_pid(RoomTable, RoomName) ->
 %% @spec add_user(UserTable, UserRecord) -> boolean()
 %% @end
 %%--------------------------------------------------------------------
-add_user(UserTable, UserRecord) ->
-    ets:insert_new(UserTable, UserRecord).
+add_user(State, User) ->
+    ets:insert_new(State#state.users, User),
+    State.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -215,7 +216,7 @@ add_user(UserTable, UserRecord) ->
 generate_new_username(UserTable) ->
     Num = get_lowest_unused_guest_num(UserTable),
     NumBin = list_to_binary(integer_to_list(Num)),
-    <<?GUEST, NumBin>>.
+    <<?GUEST, NumBin/binary>>.
 
 %%--------------------------------------------------------------------
 %% @private

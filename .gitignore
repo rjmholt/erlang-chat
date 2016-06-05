@@ -1,5 +1,6 @@
 *.beam
 *.BEAM
+*.dump
 */ebin
 */jiffy
 */deps

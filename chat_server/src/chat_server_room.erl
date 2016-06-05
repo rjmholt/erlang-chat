@@ -4,15 +4,16 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 2016-06-05 16:14:20.928854
+%%% Created : 2016-06-03 22:13:26.265562
 %%%-------------------------------------------------------------------
--module(server_user_out).
+-module(chat_server_room).
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/1,
-         send_message/2]).
+-export([new/2,
+         chat_message/3,
+         new_join/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,31 +25,41 @@
 
 -define(SERVER, ?MODULE).
 
+-record(state, {roomid, users = #{}, owner = <<>>}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server
+%% Creates a new room service
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec new() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Socket) ->
-    gen_server:start_link(?MODULE, [Socket], []).
+new(ServerName, Owner) ->
+    gen_server:start_link(?MODULE, [ServerName, Owner], []).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send a message out as a JSON packet. Message should be a map of the
-%% format:
-%%  #{ type => <message-type>, ...}
+%% Sends a message to all users in the room
 %%
-%% @spec send_message(ServerPid, Message) -> noreply
+%% @spec chat_message(RoomPid, SenderName, Message) -> noreply
 %% @end
 %%--------------------------------------------------------------------
-send_message(ServerPid, Message) ->
-    gen_server:cast(ServerPid, {message, Message}).
+chat_message(RoomPid, SenderName, Message) ->
+    gen_server:cast(RoomPid, {chat_message, SenderName, Message}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Join a new user to a room for the first time
+%%
+%% @spec new_join(RoomPid, SenderPid, SenderName) -> noreply
+%% @end
+%%--------------------------------------------------------------------
+new_join(RoomPid, SenderPid, SenderName) ->
+  gen_server:cast(RoomPid, {new_join, SenderName, SenderPid}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,8 +76,8 @@ send_message(ServerPid, Message) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Socket]) ->
-    {ok, Socket}.
+init([ServerName, Owner]) ->
+    {ok, #state{roomid=ServerName, owner=Owner}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -96,10 +107,22 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({message, Msg}, Socket) ->
-    Bin = jiffy:encode(Msg),
-    gen_tcp:send(Socket, Bin),
-    {noreply, Socket}.
+handle_cast({chat_message, SenderName, Message}, State) ->
+  OutMsg = #{type => message, identity => SenderName, message => Message},
+  send_all(State#state.users, OutMsg),
+  {noreply, State};
+
+handle_cast({new_join, SenderName, SenderPid}, State) ->
+  NewState = add_user(State, SenderPid),
+  NewIdMsg = #{type => newidentity, identity => SenderName, former => <<>>},
+  JoinMsg  = #{type => roomchange, identity => SenderName,
+               roomid => NewState#state.roomid, former => <<>>},
+  send_all(NewState#state.users, NewIdMsg),
+  send_all(NewState#state.users, JoinMsg),
+  {noreply, NewState};
+
+handle_cast(_Msg, State) ->
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -143,6 +166,26 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Send a message to all users in the room
+%%
+%% @spec send_all(UserMap, Message) -> term()
+%% @end
+%%--------------------------------------------------------------------
+send_all(UserMap, Message) ->
+    SendOne = fun (UPid, _) -> UPid ! Message end,
+    maps:map(SendOne, UserMap).
 
-
-
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add a new user to the room
+%%
+%% @spec add_user(State, UserPid) -> #state{}
+%% @end
+%%--------------------------------------------------------------------
+add_user(State, UserPid) ->
+  NewUsers = maps:put(UserPid, true, State#state.users),
+  State#state{users = NewUsers}.
