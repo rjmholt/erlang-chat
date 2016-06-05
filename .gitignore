@@ -1,7 +1,9 @@
 *.beam
 *.BEAM
-ebin/*
-jiffy
-jiffy/*
-deps
-_rel
+*/ebin
+*/jiffy
+*/deps
+*/_rel
+*/rel
+relx.config
+*.d

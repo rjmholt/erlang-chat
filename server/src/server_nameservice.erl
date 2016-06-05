@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 2016-06-03 18:55:42.370790
 %%%-------------------------------------------------------------------
--module(erlang_chat_nameservice).
+-module(server_nameservice).
 
 -behaviour(gen_server).
 
@@ -25,7 +25,7 @@
          terminate/2,
          code_change/3]).
 
--include("include/erlang_chat.hrl").
+-include("include/chat.hrl").
 -define(SERVER, ?MODULE).
 -define(GUEST, "guest").
 
@@ -89,7 +89,7 @@ get_room(RoomName) ->
 %%--------------------------------------------------------------------
 init([]) ->
     State    = #state{},
-    {ok, MainHall} = erlang_chat_room:new(?MAINHALL),
+    {ok, MainHall} = server_room:new(?MAINHALL),
     MH_Entry = #room{name=?MAINHALL, pid=MainHall},
     ets:insert(State#state.rooms, MH_Entry),
     {ok, State}.

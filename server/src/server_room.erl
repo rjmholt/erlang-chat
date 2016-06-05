@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 2016-06-03 22:13:26.265562
 %%%-------------------------------------------------------------------
--module(erlang_chat_room).
+-module(server_room).
 
 -behaviour(gen_server).
 

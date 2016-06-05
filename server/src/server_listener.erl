@@ -1,4 +1,4 @@
--module(erlang_chat_listener).
+-module(server_listener).
 
 -author('Robert Holt').
 
@@ -11,4 +11,4 @@ start(Port) ->
 par_connect(Listen) ->
     {ok, Socket} = gen_tcp:accept(Listen),
     spawn(fun () -> par_connect(Listen) end),
-    erlang_chat_user:start(Socket).
+    server_user:start(Socket).
