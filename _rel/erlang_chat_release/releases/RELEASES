@@ -1,0 +1,6 @@
+[{release,"erlang_chat_release","1","7.3",
+          [{stdlib,"2.8","./lib/stdlib-2.8"},
+           {kernel,"4.2","./lib/kernel-4.2"},
+           {jiffy,"git","./lib/jiffy-git"},
+           {erlang_chat,"0.0.1","./lib/erlang_chat-0.0.1"}],
+          permanent}].
