@@ -1,3 +1,0 @@
-{release,{"erlang_chat_release","1"},
-         {erts,"7.3"},
-         [{stdlib,"2.8"},{kernel,"4.2"},{jiffy,"git"},{erlang_chat,"0.0.1"}]}. 
