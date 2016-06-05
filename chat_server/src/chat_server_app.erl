@@ -6,8 +6,6 @@
 
 start(_Type, []) ->
   Port = 7777,
-  erlang:display("******** HELLO *********"),
-  io:format("App start() called~n"),
   chat_server_sup:start_link(Port).
 
 stop(_State) ->

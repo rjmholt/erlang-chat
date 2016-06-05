@@ -8,7 +8,6 @@ start_link(Port) ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, [Port]).
 
 init([Port]) ->
-  io:format("Supervisor init() called~n"),
   SupFlags = #{strategy  => one_for_one,
                intensity => 1,
                period    => 5},

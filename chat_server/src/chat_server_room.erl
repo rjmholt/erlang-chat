@@ -175,7 +175,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 send_all(UserMap, Message) ->
-    SendOne = fun (UPid, _) -> UPid ! Message end,
+    SendOne = fun (UPid, _) ->
+                  chat_server_user_out:send_message(UPid, Message)
+              end,
     maps:map(SendOne, UserMap).
 
 %%--------------------------------------------------------------------
