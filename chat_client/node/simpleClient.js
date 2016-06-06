@@ -3,8 +3,10 @@ var net      = require('net');
 var clientState = { name: '',
                     room: '',
                     prompt: function () {
-                        process.stdout.write('[' + this.room + '] ' +
+                        if (this.name !== '' && this.room !== '') {
+                            process.stdout.write('[' + this.room + '] ' +
                                 this.name + '> ');
+                        }
                     }
                   };
 
