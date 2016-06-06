@@ -69,10 +69,9 @@ extract_command(Line) ->
             #{type => identitychange,
               identity => list_to_binary(Identity)};
         "createroom" ->
-            [Identity, RoomID] = Tkns,
+            [RoomID] = Tkns,
             #{type => createroom,
-              roomid => list_to_binary(RoomID),
-              identity => list_to_binary(Identity)};
+              roomid => list_to_binary(RoomID)};
         "who" ->
             [RoomID] = Tkns,
             #{type => who, roomid => list_to_binary(RoomID)};
