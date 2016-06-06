@@ -16,9 +16,11 @@ start(Socket) ->
 
 loop(Socket, State) ->
     receive
-        {tcp, Socket, Bin} ->
-            Msg = jiffy:decode(Bin, [return_maps]),
-            process_message(State, Msg)
+      {tcp, Socket, Bin} ->
+        io:format("Received message:~n"),
+        erlang:display(Bin),
+        Msg = jiffy:decode(Bin, [return_maps]),
+        process_message(State, Msg)
     end,
     loop(Socket, State).
 

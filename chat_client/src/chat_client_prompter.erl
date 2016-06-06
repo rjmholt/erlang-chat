@@ -1,70 +1,38 @@
--module(chat_client_main).
+-module(chat_client_prompter).
 
--export([start_link/2]).
+-export([start_link/4]).
 
 -record(state, {name, room}).
 
-start_link(Addr, Port) ->
-  Pid = spawn_link(fun () -> init(Addr, Port) end),
-  {ok, Pid}.
+start_link(Socket, RecvPid, Name, Room) ->
+  spawn_link(fun () ->
+                 loop(#state{name = Name, room = Room}, RecvPid, Socket)
+             end).
 
-init(Addr, Port) ->
-  case gen_tcp:connect(Addr, Port, []) of
-    {ok, Socket} ->
-      {Name, Room}  = connect_handshake(Socket),
-      loop(#state{name = Name, room = Room}, Socket);
-    {error, Reason} ->
-      io:format("~nCannot connect to server.~nReason: ~p~n", [Reason])
-  end.
-
-loop(State, Socket) ->
+loop(State, RecvPid, Socket) ->
   NewState = receive
-               {tcp, Socket, InBin} ->
-                 InMsg = jiffy:decode(InBin, [return_maps]),
-                 process_received_message(State, InMsg)
+               {newstate, RecvPid, Name, Room} ->
+                 #state{name = Name, room = Room}
              after
-               0 ->
-                 State
+               0 -> State
              end,
   case prompt_user(NewState) of
     {message, OutMsg} ->
       OutBin = jiffy:encode(OutMsg),
+      erlang:display(OutBin),
       gen_tcp:send(Socket, OutBin);
-    _ -> ok
+    Other ->
+      erlang:display("Non-message out"),
+      erlang:display(Other),
+      ok
   end,
-  loop(NewState, Socket).
-
-connect_handshake(Socket) ->
-  Name = receive
-           {tcp, Socket, NameBin} ->
-             NameMsg = jiffy:decode(NameBin, [return_maps]),
-             #{<<"type">>     := <<"newidentity">>,
-               <<"identity">> := Ident,
-               <<"former">>   := <<>>} = NameMsg,
-             Ident
-         end,
-  Room = receive
-           {tcp, Socket, RoomBin} ->
-             RoomMsg = jiffy:decode(RoomBin, [return_maps]),
-             #{<<"type">>     := <<"roomchange">>,
-               <<"identity">> := Name,
-               <<"former">>   := <<>>,
-               <<"roomid">>   := RoomID} = RoomMsg,
-             RoomID
-         end,
-  {Name, Room}.
-
-process_received_message(State,
-                #{<<"type">>     := <<"message">>,
-                  <<"identity">> := Sender,
-                  <<"message">>  := Content}) ->
-  io:format("~s: ~s~n", [Sender, Content]),
-  State.
+  loop(NewState, RecvPid, Socket).
 
 prompt_user(State) ->
   Room = State#state.room,
   Name = State#state.name,
-  Input = io:get_line(<<"[", Room/utf8, "] ", Name/utf8, "> ">>),
+  Input = io:get_line(<<"[", Room/binary, "] ", Name/binary, "> ">>),
+  io:format("*** INPUT ***: ~p~n", [Input]),
   try parse_input(Input) of
       Msg ->
         {message, Msg}
@@ -75,9 +43,10 @@ prompt_user(State) ->
 parse_input(Input) ->
     case string:substr(Input, 1, 1) of
         "#" ->
-            extract_command(Input);
+          extract_command(Input);
         _ ->
-            #{type => message, content => list_to_binary(Input)}
+          erlang:display("message created"),
+          #{type => message, message => list_to_binary(Input)}
     end.
 
 extract_command(Line) ->

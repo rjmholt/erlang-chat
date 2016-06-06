@@ -98,6 +98,7 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({message, Msg}, Socket) ->
     Bin = jiffy:encode(Msg),
+    erlang:display(Bin),
     gen_tcp:send(Socket, Bin),
     {noreply, Socket}.
 

@@ -5,7 +5,9 @@
 -export([stop/1]).
 
 start(_Type, _Args) ->
-  chat_client_sup:start_link().
+  Addr = "localhost",
+  Port = 7777,
+  chat_client_receiver:start_link(Addr, Port).
 
 stop(_State) ->
   ok.
