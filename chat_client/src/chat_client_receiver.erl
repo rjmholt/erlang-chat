@@ -21,9 +21,12 @@ init(Addr, Port) ->
 receive_loop(Socket, PromptPid, State) ->
   NewState = receive
                {tcp, Socket, InBin} ->
-                 InMsg = jiffy:decode(InBin, [return_maps]),
-                 NextState = process_received_message(State, InMsg),
-                 NextState
+                 InMsg =
+                   case jiffy:decode(InBin, [return_maps, return_trailer]) of
+                     {has_trailer, EJson, _} -> EJson;
+                     EJson                    -> EJson
+                   end,
+                 process_received_message(State, InMsg)
              end,
   PromptPid ! {newstate, self(), NewState#state.name, NewState#state.room},
   receive_loop(Socket, PromptPid, NewState).

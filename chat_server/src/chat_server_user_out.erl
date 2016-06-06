@@ -97,7 +97,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({message, Msg}, Socket) ->
-    Bin = jiffy:encode(Msg),
+    Bin = jiffy:encode(Msg, [force_utf8]),
     erlang:display(Bin),
     gen_tcp:send(Socket, Bin),
     {noreply, Socket}.
