@@ -52,13 +52,9 @@ Ideally, the client would execute when `make run` is called, or by executing
   [user@host chat_client] $ ./_rel/chat_client_release/bin/chat_client_release foreground
   ~~~~
 
-However, there is currently a bug I haven't solved involving the prompt:
-
-  ~~~~
-  Input = io:get_line(PromptString).
-  ~~~~
-
-doesn't seem to return under the release conditions.
+However, there is currently a bug I haven't solved involving the prompt, in
+which `Input = io:get_line(PromptString)` doesn't seem to return under the
+release conditions.
 
 ### Node Client
 The Node.js client is a single file under `/chat_client/node/simpleClient.js`.
