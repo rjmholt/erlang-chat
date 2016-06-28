@@ -88,10 +88,10 @@ To run the server, simple run:
 Or to run it as a background process:
 
   ~~~~
-  [user@host chat_server] $ ./_rel/chat_server_release/bin/chat_server_release
+  [user@host chat_server] $ ./_rel/chat_server_release/bin/chat_server_release start
   ~~~~
 
-Currently the server only supports the single *MainHall* chat room and simple
+Currently the server only supports the single **MainHall** chat room and simple
 messaging. Planned additions are to allow name changes, room creation, room
 ownership and room bans.
 

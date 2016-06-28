@@ -61,6 +61,27 @@ chat_message(RoomPid, SenderName, Message) ->
 new_join(RoomPid, SenderPid, SenderName) ->
   gen_server:cast(RoomPid, {new_join, SenderName, SenderPid}).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Join an already connected user to a room
+%%
+%% @spec join(RoomPid, SenderPid, SenderName) -> noreply
+%% @end
+%%--------------------------------------------------------------------
+join(RoomPid, SenderPid, SenderName, FromRoomName) ->
+  gen_server:cast(RoomPid, {join, SenderName, SenderPid, FromRoomName}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove a user from a room
+%%
+%% @spec join(RoomPid, SenderPid, SenderName) -> noreply
+%% @end
+%%--------------------------------------------------------------------
+leave(RoomPid, SenderPid, SenderName, ToRoomName) ->
+  gen_server:cast(RoomPid, {leave, SenderName, SenderPid, ToRoomName}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -120,6 +141,21 @@ handle_cast({new_join, SenderName, SenderPid}, State) ->
   send_all(NewState#state.users, NewIdMsg),
   send_all(NewState#state.users, JoinMsg),
   {noreply, NewState};
+
+handle_cast({join, SenderName, SenderPid, FromRoomName}, State) ->
+  NewState = add_user(State, SenderPid),
+  Msg      = #{type => roomchange, identity => SenderName,
+               roomid => NewState#state.roomid, former => FromRoomName},
+  send_all(NewState#state.users, Msg),
+  {noreply, NewState};
+
+handle_cast({leave, SenderName, SenderPid, ToRoomName}, State) ->
+  NewState = remove_user(State, SenderPid),
+  Msg      = #{type => roomchange, identity => SenderName,
+               roomid => ToRoomName, former => State#state.roomid},
+  send_all(NewState#state.users, Msg),
+  {noreply, NewState};
+
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -190,4 +226,16 @@ send_all(UserMap, Message) ->
 %%--------------------------------------------------------------------
 add_user(State, UserPid) ->
   NewUsers = maps:put(UserPid, true, State#state.users),
+  State#state{users = NewUsers}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove a user from the room
+%%
+%% @spec remove_user(State, UserPid) -> #state{}
+%% @end
+%%--------------------------------------------------------------------
+remove_user(State, UserPid) ->
+  NewUsers = maps:remove(UserPid, State#state.users),
   State#state{users = NewUsers}.
