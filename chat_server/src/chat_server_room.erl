@@ -12,8 +12,10 @@
 
 %% API
 -export([new/2,
-         chat_message/3,
-         new_join/3]).
+         broadcast/2,
+         add/2,
+         remove/2,
+         delete/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -22,6 +24,8 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+
+-include("include/chat.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -38,49 +42,49 @@
 %% @spec new() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-new(ServerName, Owner) ->
-    gen_server:start_link(?MODULE, [ServerName, Owner], []).
+new(RoomID, Owner) ->
+    gen_server:start_link(?MODULE, [RoomID, Owner], []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends a message to all users in the room
 %%
-%% @spec chat_message(RoomPid, SenderName, Message) -> noreply
+%% @spec broadcast(RoomPid, Message) -> noreply
 %% @end
 %%--------------------------------------------------------------------
-chat_message(RoomPid, SenderName, Message) ->
-    gen_server:cast(RoomPid, {chat_message, SenderName, Message}).
+broadcast(RoomPid, Message) ->
+    gen_server:cast(RoomPid, {broadcast, Message}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Join a new user to a room for the first time
+%% Add the sending user to the room
 %%
-%% @spec new_join(RoomPid, SenderPid, SenderName) -> noreply
+%% @spec add(RoomPid, UPid) -> ok
 %% @end
 %%--------------------------------------------------------------------
-new_join(RoomPid, SenderPid, SenderName) ->
-  gen_server:cast(RoomPid, {new_join, SenderName, SenderPid}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Join an already connected user to a room
-%%
-%% @spec join(RoomPid, SenderPid, SenderName) -> noreply
-%% @end
-%%--------------------------------------------------------------------
-join(RoomPid, SenderPid, SenderName, FromRoomName) ->
-  gen_server:cast(RoomPid, {join, SenderName, SenderPid, FromRoomName}).
+add(RoomPid, UPid) ->
+  gen_server:call(RoomPid, {add, UPid}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove a user from a room
+%% Remove the sending user from the room
 %%
-%% @spec join(RoomPid, SenderPid, SenderName) -> noreply
+%% @spec remove(RoomPid, UPid) -> ok
 %% @end
 %%--------------------------------------------------------------------
-leave(RoomPid, SenderPid, SenderName, ToRoomName) ->
-  gen_server:cast(RoomPid, {leave, SenderName, SenderPid, ToRoomName}).
+remove(RoomPid, UPid) ->
+  gen_server:call(RoomPid, {remove, UPid}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send all room occupants to MainHall and terminate the room, if
+%% the Owner is correct
+%%
+%% @spec delete(RoomPid, UPid) -> ok | {error, Reason}
+%% @end
+%%--------------------------------------------------------------------
+delete(RoomPid, UPid) ->
+  gen_server:call(RoomPid, {delete, UPid}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -97,8 +101,8 @@ leave(RoomPid, SenderPid, SenderName, ToRoomName) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ServerName, Owner]) ->
-    {ok, #state{roomid=ServerName, owner=Owner}}.
+init([RoomID, OwnerName]) ->
+    {ok, #state{roomid=RoomID, owner=OwnerName}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -114,6 +118,29 @@ init([ServerName, Owner]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({add, UPid}, _From, State) ->
+  NewState = add_user(State, UPid),
+  {reply, ok, NewState};
+
+handle_call({remove, UPid}, _From, State) ->
+  NewState = remove_user(State, UPid),
+  {reply, ok, NewState};
+
+handle_call({delete, SenderName}, _From, State) ->
+  MsgBody = #{type => roomchange,
+              roomid => ?MAINHALL,
+              former => State#state.roomid},
+  MainHall = chat_server_nameservice:get_room(?MAINHALL),
+  MsgEach = fun (UserPid) ->
+                UserName = chat_server_user:get_name(UserPid),
+                Msg = MsgBody#{identity => UserName},
+                chat_server_user_out:send_message(UserPid, Msg)
+  end,
+  Users = maps:keys(State#state.users),
+  chat_server_room:add(MainHall, Users),
+  lists:map(MsgEach, Users),
+  {stop, shutdown, ok, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -128,34 +155,9 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({chat_message, SenderName, Message}, State) ->
-  OutMsg = #{type => message, identity => SenderName, message => Message},
-  send_all(State#state.users, OutMsg),
+handle_cast({broadcast, Msg}, State) ->
+  send_all(State#state.users, Msg),
   {noreply, State};
-
-handle_cast({new_join, SenderName, SenderPid}, State) ->
-  NewState = add_user(State, SenderPid),
-  NewIdMsg = #{type => newidentity, identity => SenderName, former => <<>>},
-  JoinMsg  = #{type => roomchange, identity => SenderName,
-               roomid => NewState#state.roomid, former => <<>>},
-  send_all(NewState#state.users, NewIdMsg),
-  send_all(NewState#state.users, JoinMsg),
-  {noreply, NewState};
-
-handle_cast({join, SenderName, SenderPid, FromRoomName}, State) ->
-  NewState = add_user(State, SenderPid),
-  Msg      = #{type => roomchange, identity => SenderName,
-               roomid => NewState#state.roomid, former => FromRoomName},
-  send_all(NewState#state.users, Msg),
-  {noreply, NewState};
-
-handle_cast({leave, SenderName, SenderPid, ToRoomName}, State) ->
-  NewState = remove_user(State, SenderPid),
-  Msg      = #{type => roomchange, identity => SenderName,
-               roomid => ToRoomName, former => State#state.roomid},
-  send_all(NewState#state.users, Msg),
-  {noreply, NewState};
-
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
